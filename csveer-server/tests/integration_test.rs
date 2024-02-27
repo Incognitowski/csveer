@@ -19,9 +19,9 @@ async fn test_should_create_context() {
         .await
         .unwrap();
 
-    assert!(res
-        .text()
-        .await
-        .unwrap()
-        .contains(r#"{"id":1,"name":"test","created_at":""#));
+    let result_str = &res.text().await.unwrap();
+
+    eprintln!("Result string: {}", result_str);
+
+    assert!(&result_str.contains(r#"{"id":1,"name":"test","created_at":""#));
 }

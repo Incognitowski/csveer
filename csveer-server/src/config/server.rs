@@ -3,14 +3,12 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 
-pub struct AppError(anyhow::Error);
-
-impl AppError {
-    pub fn new(message: String) -> Self {
-        Self {
-            0: anyhow::format_err!(message),
-        }
-    }
+pub enum AppError {
+    Validation(String),
+    DetailedValidation(String, Vec<String>),
+    Error(String),
+    DetailedError(String, Vec<String>),
+    // AnyhowError(anyhow::Error),
 }
 
 #[derive(Debug, Serialize)]
@@ -26,29 +24,40 @@ impl ErrorResponse {
             details: Vec::new(),
         }
     }
+
+    pub fn new_detailed(message: String, details: Vec<String>) -> Self {
+        Self { message, details }
+    }
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        let status_code = match self {
+            Self::Validation(_) | Self::DetailedValidation(_, _) => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+
+        let error_response = match self {
+            AppError::Validation(m) => ErrorResponse::new(m),
+            AppError::DetailedValidation(m, d) => ErrorResponse::new_detailed(m, d),
+            AppError::Error(m) => ErrorResponse::new(m),
+            AppError::DetailedError(m, d) => ErrorResponse::new_detailed(m, d),
+            // AppError::AnyhowError(e) => ErrorResponse::new(e.to_string()),
+        };
+
         Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .status(status_code)
             .header("Content-Type", "application/json")
-            .body(Body::from(
-                serde_json::to_string(&ErrorResponse::new(format!(
-                    "Something went wrong: {}",
-                    self.0
-                )))
-                .unwrap(),
-            ))
+            .body(Body::from(serde_json::to_string(&error_response).unwrap()))
             .unwrap()
     }
 }
 
 impl<E> From<E> for AppError
 where
-    E: Into<anyhow::Error>,
+    E: Into<anyhow::Error> + std::fmt::Display,
 {
     fn from(err: E) -> Self {
-        Self(err.into())
+        Self::Error(format!("{:#}", err))
     }
 }

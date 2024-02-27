@@ -15,7 +15,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let tracker = TaskTracker::new();
     let token = CancellationToken::new();
 
-    let app = csveer_server::build_app().await?;
+    let db_uri = String::from("postgres://postgres:root@localhost/postgres");
+
+    let db_pool = csveer_server::get_db_pool(db_uri).await?;
+    let app = csveer_server::build_app(db_pool.clone()).await?;
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:7000").await?;
 

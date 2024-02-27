@@ -1,5 +1,7 @@
-use super::super::config::server::AppError;
-use crate::data::context::{get_context_by_name, insert_context, CreatableContext, SourceContext};
+use crate::{
+    config::server::AppError,
+    data::context::{get_context_by_name, insert_context, CreatableContext, SourceContext},
+};
 use axum::extract::{Json, State};
 use sqlx::PgPool;
 
@@ -11,14 +13,14 @@ pub async fn create_context(
     // let mut db_conn = db.acquire().await?;
 
     if creatable_context.name.is_empty() {
-        return Err(AppError::new(String::from(
+        return Err(AppError::Validation(String::from(
             "Context name should not be empty.",
         )));
     }
 
     for char in creatable_context.name.chars() {
         if !&char.is_digit(36) && &char != &'-' {
-            return Err(AppError::new(format!(
+            return Err(AppError::Validation(format!(
                 "Context name should only contain numbers or charaters. Found char '{}'",
                 &char
             )));
@@ -28,7 +30,7 @@ pub async fn create_context(
     let mut tx = db.begin().await?;
 
     if let Some(_) = get_context_by_name(&creatable_context.name, &mut *tx).await {
-        return Err(AppError::new(format!(
+        return Err(AppError::Validation(format!(
             "A context with name '{}' already exists.",
             &creatable_context.name
         )));
