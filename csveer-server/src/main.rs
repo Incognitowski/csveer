@@ -60,7 +60,7 @@ fn spawn_listener(tracker: &TaskTracker, base_token: &CancellationToken) {
     );
 }
 
-#[instrument]
+#[instrument(skip(cancelation_token))]
 async fn listen(cancelation_token: &CancellationToken) {
     loop {
         if cancelation_token.is_cancelled() {
@@ -72,13 +72,14 @@ async fn listen(cancelation_token: &CancellationToken) {
 }
 
 async fn shutdown_signal(cancelation_token: CancellationToken) {
-    // I'm still not sure about how this works...
+    // This starts a listener on Ctrl + C input
     let ctrl_c = async {
         signal::ctrl_c()
             .await
             .expect("failed to install Ctrl+C handler");
     };
 
+    // This starts a listener on the Unix terminate signal
     #[cfg(unix)]
     let terminate = async {
         signal::unix::signal(signal::unix::SignalKind::terminate())
@@ -90,8 +91,9 @@ async fn shutdown_signal(cancelation_token: CancellationToken) {
     #[cfg(not(unix))]
     let terminate = std::future::pending::<()>();
 
+    // Whichever signal is received first, cancels our token.
     tokio::select! {
-        _ = ctrl_c => {cancelation_token.cancel()},
-        _ = terminate => {cancelation_token.cancel()},
+        _ = ctrl_c => { cancelation_token.cancel() },
+        _ = terminate => { cancelation_token.cancel() },
     }
 }
