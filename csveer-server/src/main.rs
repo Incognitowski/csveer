@@ -3,11 +3,18 @@ use std::{error::Error, time::Duration};
 use tokio::signal;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tracing::{info, info_span, instrument, Instrument};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let subscriber = tracing_subscriber::FmtSubscriber::new();
-    tracing::subscriber::set_global_default(subscriber)?;
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                "csveer_server=debug,tower_http=debug,axum::rejection=trace".into()
+            }),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
 
     let main_span = info_span!("main");
     let _guard = main_span.enter();
