@@ -20,7 +20,7 @@ pub enum CompressionType {
     },
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct FileSourceCreation {
     pub context: String,
     pub identifier: String,

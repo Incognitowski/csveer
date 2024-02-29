@@ -15,6 +15,12 @@ pub struct CreatableContext {
     pub name: String,
 }
 
+impl CreatableContext {
+    pub fn new(name: String) -> Self {
+        Self { name }
+    }
+}
+
 pub async fn insert_context(
     creatable_context: CreatableContext,
     executor: &mut PgConnection,
