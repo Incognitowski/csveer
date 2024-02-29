@@ -507,6 +507,7 @@ dependencies = [
  "axum",
  "chrono",
  "dotenvy",
+ "rand",
  "reqwest",
  "serde",
  "serde_json",

@@ -2,13 +2,16 @@ use crate::{
     config::server::AppError,
     data::context::{get_context_by_name, insert_context, CreatableContext, SourceContext},
 };
-use axum::extract::{Json, State};
+use axum::{
+    extract::{Json, State},
+    http::StatusCode,
+};
 use sqlx::PgPool;
 
 pub async fn create_context(
     State(db): State<PgPool>,
     Json(creatable_context): Json<CreatableContext>,
-) -> anyhow::Result<Json<SourceContext>, AppError> {
+) -> anyhow::Result<(StatusCode, Json<SourceContext>), AppError> {
     // If you need a connection without a transaction
     // let mut db_conn = db.acquire().await?;
 
@@ -38,5 +41,5 @@ pub async fn create_context(
 
     let context = insert_context(creatable_context, &mut *tx).await?;
     tx.commit().await?;
-    Ok(Json(context))
+    Ok((StatusCode::CREATED, Json(context)))
 }

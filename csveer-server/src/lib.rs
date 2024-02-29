@@ -20,5 +20,6 @@ pub async fn build_app(db_pool: Pool<Postgres>) -> Result<Router, Box<dyn Error>
 
     Ok(Router::new()
         .route("/context", post(app::context::create_context))
+        .route("/source", post(app::file_source::create_file_source))
         .with_state(db_pool))
 }

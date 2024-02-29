@@ -1,18 +1,23 @@
-use serde::{Deserialize, Serialize};
+use axum::{
+    extract::{Json, State},
+    http::StatusCode,
+};
+use sqlx::PgPool;
 
-#[derive(Serialize, Deserialize)]
-pub enum SourceType {}
+use crate::{
+    config::server::AppError,
+    data::file_source::{insert_file_source, FileSource, FileSourceCreation},
+};
 
-#[derive(Serialize, Deserialize)]
-pub enum CompressionType {}
+pub async fn create_file_source(
+    State(db): State<PgPool>,
+    Json(creatable_file_source): Json<FileSourceCreation>,
+) -> anyhow::Result<(StatusCode, Json<FileSource>), AppError> {
+    let mut tx = db.begin().await?;
 
-#[derive(Serialize, Deserialize)]
-pub struct FileSourceCreation {
-    context: String,
-    identifier: String,
-    description: String,
-    source: SourceType,
-    headers: bool,
-    compression: CompressionType,
-    hide_columns: Vec<i32>,
+    let created_file_source = insert_file_source(creatable_file_source, &mut *tx).await?;
+
+    tx.commit().await?;
+
+    Ok((StatusCode::CREATED, Json(created_file_source)))
 }

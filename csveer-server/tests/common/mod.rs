@@ -1,15 +1,19 @@
 use core::panic;
 use std::net::SocketAddr;
 
+use rand::distributions::{Alphanumeric, DistString};
 use tokio::{net::TcpListener, process::Command};
 
-pub async fn reset_db() {
+pub async fn reset_db(db_suffix: &String) {
     match Command::new("sqlx")
         .arg("database")
         .arg("reset")
         .arg("-y")
         .arg("--database-url")
-        .arg("postgres://postgres:root@localhost/postgres_test")
+        .arg(format!(
+            "postgres://postgres:root@localhost/postgres_test_{}",
+            db_suffix
+        ))
         .output()
         .await
     {
@@ -28,11 +32,20 @@ pub async fn create_listener() -> (SocketAddr, TcpListener) {
     (addr, listener)
 }
 
-pub async fn spawn_server(listener: TcpListener) {
-    let db_uri = String::from("postgres://postgres:root@localhost/postgres_test");
+pub async fn spawn_server(listener: TcpListener, db_suffix: &String) {
+    let mut db_uri = String::from("postgres://postgres:root@localhost/postgres_test_");
+    db_uri.push_str(db_suffix);
     let db_pool = csveer_server::get_db_pool(db_uri).await.unwrap();
     tokio::spawn(async move {
         let app = csveer_server::build_app(db_pool.clone()).await.unwrap();
         axum::serve(listener, app).await.unwrap();
     });
+}
+
+pub async fn prepare_for_test() -> SocketAddr {
+    let db_suffix: String = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
+    reset_db(&db_suffix).await;
+    let (addr, listener) = create_listener().await;
+    spawn_server(listener, &db_suffix).await;
+    addr
 }

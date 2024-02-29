@@ -20,3 +20,4 @@ chrono = { version = "0.4.34", features = ["serde"]}
 anyhow = { version = "1.0.80" }
 reqwest = { version = "0.11.24" }
 tokio-util = { version = "0.7.10", features = ["rt"] }
+rand = { version = "0.8.5" }
