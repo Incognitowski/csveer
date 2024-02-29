@@ -4,6 +4,12 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgConnection;
 
 #[derive(Serialize, Deserialize, Debug)]
+pub enum CompressionMechanism {
+    GZIP,
+    ZIP,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type")]
 pub enum SourceType {
     HttpPassive,
@@ -15,7 +21,7 @@ pub enum CompressionType {
     NoCompression(bool),
     Compressed {
         #[serde(rename = "type")]
-        kind: String,
+        kind: CompressionMechanism,
         password: Option<String>,
     },
 }

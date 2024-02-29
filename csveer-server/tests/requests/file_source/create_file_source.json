@@ -1,0 +1,14 @@
+{
+	"context": "banking",
+	"identifier": "daily-transfer-csv",
+	"description": "Daily Transfer CSV distribution",
+	"source": {
+		"type": "HttpPassive"
+	},
+	"headers": false,
+	"compression": {
+		"type": "ZIP",
+		"password": "test"
+	},
+	"hide_columns": []
+}
