@@ -39,16 +39,16 @@ pub struct FileSourceCreation {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FileSource {
-    id: i32,
-    context: String,
-    identifier: String,
-    description: String,
-    source: Option<SourceType>,
-    headers: bool,
-    compression: Option<CompressionType>,
-    hide_columns: Option<Vec<i32>>,
-    created_at: DateTime<Utc>,
-    updated_at: Option<DateTime<Utc>>,
+    pub id: i32,
+    pub context: String,
+    pub identifier: String,
+    pub description: String,
+    pub source: Option<SourceType>,
+    pub headers: bool,
+    pub compression: Option<CompressionType>,
+    pub hide_columns: Option<Vec<i32>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 pub struct FileSourceEntity {
@@ -105,4 +105,34 @@ pub async fn insert_file_source(
     .to_domain();
 
     Ok(created_file_source)
+}
+
+pub async fn find_by_context_and_identifier(
+    context: &str,
+    identifier: &str,
+    executor: &mut PgConnection,
+) -> anyhow::Result<Option<FileSource>> {
+    let file_source_entity = sqlx::query_as!(
+        FileSourceEntity,
+        r#"
+            SELECT * FROM file_source fs WHERE fs.context = $1 AND fs.identifier = $2
+        "#,
+        context,
+        identifier,
+    )
+    .fetch_optional(executor)
+    .await
+    .with_context(|| {
+        format!(
+            "Failed to search file sources with context {} and identifier {}",
+            context, identifier
+        )
+    })?;
+
+    let file_source = match file_source_entity {
+        Some(entity) => Some(entity.to_domain()),
+        None => None,
+    };
+
+    Ok(file_source)
 }

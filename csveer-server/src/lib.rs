@@ -24,6 +24,10 @@ pub async fn build_app(db_pool: Pool<Postgres>) -> Result<Router, Box<dyn Error>
     Ok(Router::new()
         .route("/context", post(app::context::create_context))
         .route("/source", post(app::file_source::create_file_source))
+        .route(
+            "/:context/:file_source/destination",
+            post(app::file_destination::create_file_destination),
+        )
         .with_state(db_pool)
         .layer(
             TraceLayer::new_for_http().make_span_with(|request: &Request<_>| {

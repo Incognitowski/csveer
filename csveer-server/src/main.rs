@@ -66,7 +66,7 @@ async fn listen(cancelation_token: &CancellationToken) {
         if cancelation_token.is_cancelled() {
             break;
         }
-        tokio::time::sleep(Duration::from_secs(5)).await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
         info!("Loop")
     }
 }
