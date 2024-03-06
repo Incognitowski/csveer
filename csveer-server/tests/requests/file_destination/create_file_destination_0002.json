@@ -1,0 +1,12 @@
+{
+    "identifier": "daily-transfer-csv-to-sample-queue",
+    "destination": {
+      "type": "SQS",
+      "queue_url": "http://localhost.localstack.cloud:4566/000000000000/sample-queue"
+    },
+    "include_headers": false,
+    "batching": {
+      "type": "Fixed",
+      "batch_size": 10
+    }
+  }

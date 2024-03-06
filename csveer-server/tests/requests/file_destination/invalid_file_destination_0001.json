@@ -1,0 +1,8 @@
+{
+    "identifier": "",
+    "destination": {
+      "type": "SQS",
+      "queue_url": "http://localhost.localstack.cloud:4566/000000000000/sample-queue"
+    },
+    "include_headers": false
+  }

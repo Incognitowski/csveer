@@ -3,6 +3,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 
+#[derive(Debug)]
 pub enum AppError {
     Validation(String),
     DetailedValidation(String, Vec<String>),

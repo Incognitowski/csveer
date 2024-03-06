@@ -1,0 +1,16 @@
+{
+  "identifier": "daily-transfer-csv-to-sample-queue",
+  "destination": {
+    "type": "SQS",
+    "queue_url": "http://localhost.localstack.cloud:4566/000000000000/sample-queue"
+  },
+  "include_headers": false,
+  "grouping": {
+    "type": "GroupedByColumns",
+    "columns": [
+      1,
+      2,
+      2
+    ]
+  }
+}

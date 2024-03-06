@@ -1,0 +1,8 @@
+{
+  "identifier": "daily-transfer-csv-to-sample-queue",
+  "destination": {
+    "type": "SQS",
+    "queue_url": ""
+  },
+  "include_headers": false
+}

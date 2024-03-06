@@ -8,10 +8,15 @@ use tracing::{info, instrument};
 use crate::{
     config::server::AppError,
     data::{
-        file_destination::{insert_file_destination, FileDestination, FileDestinationCreation},
+        file_destination::{
+            insert_file_destination, BatchingConfiguration, DestinationConfiguration,
+            FileDestination, FileDestinationCreation, GroupingConfiguration,
+        },
         file_source::find_by_context_and_identifier,
     },
 };
+
+use super::validators;
 
 pub fn validate_file_destination(
     creatable_file_destination: &FileDestinationCreation,
@@ -37,7 +42,33 @@ pub fn validate_file_destination(
         }
     }
 
-    // TODO: Validate everything else
+    match &creatable_file_destination.destination {
+        DestinationConfiguration::SQS { queue_url } => {
+            validators::sqs_destination::validate(queue_url)?
+        }
+    }
+
+    match &creatable_file_destination.grouping {
+        Some(grouping) => match grouping {
+            GroupingConfiguration::GroupedByColumns { columns } => {
+                validators::column_grouping::validate(columns)?
+            }
+        },
+        None => {
+            info!("No grouping configuration set. Skipping validation.")
+        }
+    }
+
+    match &creatable_file_destination.batching {
+        Some(batching) => match batching {
+            BatchingConfiguration::Fixed { batch_size } => {
+                validators::fixed_batching::validate(batch_size)?
+            }
+        },
+        None => {
+            info!("No batching configuration set. Skipping validation.")
+        }
+    }
 
     Ok(())
 }

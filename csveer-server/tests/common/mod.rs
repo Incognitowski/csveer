@@ -49,3 +49,16 @@ pub async fn prepare_for_test() -> SocketAddr {
     spawn_server(listener, &db_suffix).await;
     addr
 }
+
+pub async fn create_file_source(addr: &SocketAddr) {
+    let client = reqwest::Client::new();
+    let _ = client
+        .post(format!("http://{}/source", addr))
+        .header("Content-Type", "application/json")
+        .body(include_str!(
+            "../requests/file_source/create_file_source.json"
+        ))
+        .send()
+        .await
+        .expect("Failed to create file source for test");
+}
