@@ -8,3 +8,15 @@ services:
       - "5432:5432"
     environment:
       POSTGRES_PASSWORD: root
+  localstack:
+    image: localstack/localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=sqs,s3
+      - DEBUG=1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    volumes:
+      - ./docker/localstack/create-queues.sh:/etc/localstack/init/ready.d/create-queues.sh 
+      - ./docker/localstack/create-s3-buckets.sh:/etc/localstack/init/ready.d/create-s3-buckets.sh

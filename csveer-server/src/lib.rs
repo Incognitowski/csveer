@@ -1,8 +1,10 @@
 use axum::{extract::MatchedPath, http::Request, routing::post, Router};
+use config::{aws::AwsConfig, listeners::FileIngestionListenerConfig};
 use sqlx::{migrate::Migrator, postgres::PgPoolOptions, Pool, Postgres};
 use std::error::Error;
+use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
-use tracing::info_span;
+use tracing::{info, info_span, instrument};
 use ulid::Ulid;
 
 mod app;
@@ -19,6 +21,12 @@ pub async fn get_db_pool(db_uri: String) -> Result<Pool<Postgres>, Box<dyn Error
 }
 
 pub async fn build_app(db_pool: Pool<Postgres>) -> Result<Router, Box<dyn Error>> {
+    let aws_config = envy::from_env::<AwsConfig>().expect("Could not create AwsConfig");
+    let listener_config = envy::from_env::<FileIngestionListenerConfig>()
+        .expect("Could not create FileIngestionListenerConfig");
+
+    info!("Aws: {:?} | Listener: {:?}", aws_config, listener_config);
+
     MIGRATOR.run(&db_pool).await?;
 
     Ok(Router::new()
@@ -44,4 +52,16 @@ pub async fn build_app(db_pool: Pool<Postgres>) -> Result<Router, Box<dyn Error>
                 )
             }),
         ))
+}
+
+#[instrument(skip(cancelation_token))]
+pub async fn start_file_ingestion_listener(
+    cancelation_token: &CancellationToken,
+) -> Result<(), Box<dyn Error>> {
+    loop {
+        if cancelation_token.is_cancelled() {
+            break;
+        }
+    }
+    Ok(())
 }

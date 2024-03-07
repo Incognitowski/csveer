@@ -1,5 +1,6 @@
 use std::{error::Error, time::Duration};
 
+use dotenv::dotenv;
 use tokio::signal;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tracing::{info, info_span, instrument, Instrument};
@@ -7,6 +8,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    dotenv().ok();
+
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
@@ -22,7 +25,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let tracker = TaskTracker::new();
     let token = CancellationToken::new();
 
-    let db_uri = String::from("postgres://postgres:root@localhost/postgres");
+    // let db_uri = String::from("postgres://postgres:root@localhost/postgres");
+    let db_uri =
+        std::env::var("DATABASE_URL").expect("DATABASE_URL environment variable is not set.");
 
     let db_pool = csveer_server::get_db_pool(db_uri).await?;
     let app = csveer_server::build_app(db_pool.clone()).await?;
