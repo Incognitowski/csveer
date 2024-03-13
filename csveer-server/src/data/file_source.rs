@@ -101,7 +101,7 @@ pub async fn insert_file_source(
     )
     .fetch_one(executor)
     .await
-    .context("Failed to insert file source into database")?
+    .context("Inserting file source into database")?
     .to_domain();
 
     Ok(created_file_source)
@@ -124,7 +124,7 @@ pub async fn find_by_context_and_identifier(
     .await
     .with_context(|| {
         format!(
-            "Failed to search file sources with context {} and identifier {}",
+            "Searching file sources with context {} and identifier {}",
             context, identifier
         )
     })?;

@@ -1,13 +1,19 @@
+use aws_sdk_s3::Client as S3Client;
+use aws_sdk_sqs::Client as SQSClient;
 use axum::{extract::MatchedPath, http::Request, routing::post, Router};
-use config::{aws::AwsConfig, listeners::FileIngestionListenerConfig};
+use config::{
+    aws::AwsConfig,
+    server::{AppError, AppState},
+};
 use sqlx::{migrate::Migrator, postgres::PgPoolOptions, Pool, Postgres};
 use std::error::Error;
-use tokio_util::sync::CancellationToken;
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tower_http::trace::TraceLayer;
-use tracing::{info, info_span, instrument};
+use tracing::{error, info, info_span, instrument, Instrument};
 use ulid::Ulid;
 
 mod app;
+mod commons;
 mod config;
 mod data;
 
@@ -20,14 +26,22 @@ pub async fn get_db_pool(db_uri: String) -> Result<Pool<Postgres>, Box<dyn Error
         .await?)
 }
 
-pub async fn build_app(db_pool: Pool<Postgres>) -> Result<Router, Box<dyn Error>> {
-    let aws_config = envy::from_env::<AwsConfig>().expect("Could not create AwsConfig");
-    let listener_config = envy::from_env::<FileIngestionListenerConfig>()
-        .expect("Could not create FileIngestionListenerConfig");
+pub fn get_aws_config() -> anyhow::Result<AwsConfig> {
+    Ok(envy::from_env::<AwsConfig>()?)
+}
 
-    info!("Aws: {:?} | Listener: {:?}", aws_config, listener_config);
-
+pub async fn build_app(
+    db_pool: Pool<Postgres>,
+    s3_client: S3Client,
+    sqs_client: SQSClient,
+) -> Result<Router, Box<dyn Error>> {
     MIGRATOR.run(&db_pool).await?;
+
+    let app_state = AppState {
+        db_pool,
+        s3_client,
+        sqs_client,
+    };
 
     Ok(Router::new()
         .route("/context", post(app::context::create_context))
@@ -36,7 +50,11 @@ pub async fn build_app(db_pool: Pool<Postgres>) -> Result<Router, Box<dyn Error>
             "/:context/:file_source/destination",
             post(app::file_destination::create_file_destination),
         )
-        .with_state(db_pool)
+        .route(
+            "/:context/:file_source/upload",
+            post(app::file_input::file_upload),
+        )
+        .with_state(app_state)
         .layer(
             TraceLayer::new_for_http().make_span_with(|request: &Request<_>| {
                 let matched_path = request
@@ -54,14 +72,34 @@ pub async fn build_app(db_pool: Pool<Postgres>) -> Result<Router, Box<dyn Error>
         ))
 }
 
-#[instrument(skip(cancelation_token))]
+#[instrument(skip(tracker, token, db_pool))]
 pub async fn start_file_ingestion_listener(
-    cancelation_token: &CancellationToken,
-) -> Result<(), Box<dyn Error>> {
-    loop {
-        if cancelation_token.is_cancelled() {
-            break;
+    tracker: &TaskTracker,
+    token: CancellationToken,
+    db_pool: Pool<Postgres>,
+) {
+    let listener_span = info_span!("file-ingestion-listener");
+    let _span_guard = listener_span.enter();
+    tracker.spawn(
+        async move {
+            tokio::select! {
+                res = app::file_ingestion_queue::listen_file_ingestion(&token, &db_pool) => {
+                    match res {
+                        Ok(_) => info!("File ingestion listener was shut down."),
+                        Err(err) => error!("Listener execution failed. {:?}", err),
+                    }
+
+                }
+            }
         }
-    }
-    Ok(())
+        .in_current_span(),
+    );
+}
+
+pub async fn get_s3_client(aws_config: &AwsConfig) -> anyhow::Result<S3Client, AppError> {
+    Ok(config::aws::get_s3_client(aws_config).await?)
+}
+
+pub async fn get_sqs_client(aws_config: &AwsConfig) -> anyhow::Result<SQSClient, AppError> {
+    Ok(config::aws::get_sqs_client(aws_config).await?)
 }

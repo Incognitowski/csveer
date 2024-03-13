@@ -1,45 +1,59 @@
-use std::{error::Error, time::Duration};
+use std::{env, error::Error};
 
 use dotenv::dotenv;
 use tokio::signal;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use tracing::{info, info_span, instrument, Instrument};
+use tracing::{error, info_span};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     dotenv().ok();
-
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                "csveer_server=debug,tower_http=debug,axum::rejection=trace".into()
-            }),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    start_tracing();
 
     let main_span = info_span!("main");
-    let _guard = main_span.enter();
+    let _span_guard = main_span.enter();
 
     let tracker = TaskTracker::new();
-    let token = CancellationToken::new();
+    let cancellation_token = CancellationToken::new();
 
-    // let db_uri = String::from("postgres://postgres:root@localhost/postgres");
-    let db_uri =
-        std::env::var("DATABASE_URL").expect("DATABASE_URL environment variable is not set.");
+    let db_uri = match env::var("DATABASE_URL") {
+        Ok(db_uri) => db_uri,
+        Err(_) => {
+            let message = "DATABASE_URL environment variable is not set.";
+            error!(message);
+            panic!("{}", message);
+        }
+    };
 
-    let db_pool = csveer_server::get_db_pool(db_uri).await?;
-    let app = csveer_server::build_app(db_pool.clone()).await?;
+    let aws_config = csveer_server::get_aws_config().expect("Failed to parse AWS config");
+
+    let db_pool = csveer_server::get_db_pool(db_uri)
+        .await
+        .expect("Failed to get database pool");
+    let s3_client = csveer_server::get_s3_client(&aws_config)
+        .await
+        .expect("Failed to create S3 client");
+    let sqs_client = csveer_server::get_sqs_client(&aws_config)
+        .await
+        .expect("Failed to create SQS client");
+
+    let app =
+        csveer_server::build_app(db_pool.clone(), s3_client.clone(), sqs_client.clone()).await?;
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:7000").await?;
 
-    spawn_listener(&tracker, &token);
+    csveer_server::start_file_ingestion_listener(
+        &tracker,
+        cancellation_token.clone(),
+        db_pool.clone(),
+    )
+    .await;
 
     tracker.close();
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal(token.clone()))
+        .with_graceful_shutdown(shutdown_signal(cancellation_token.clone()))
         .await?;
 
     tracker.wait().await;
@@ -49,31 +63,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[instrument(name = "Listener", skip(tracker, base_token))]
-fn spawn_listener(tracker: &TaskTracker, base_token: &CancellationToken) {
-    let token = base_token.clone();
-    tracker.spawn(
-        async move {
-            info!("Starting listener");
-            tokio::select! {
-                _ = listen(&token) => {
-                    info!("Listener gracefully exited.")
-                }
-            }
-        }
-        .in_current_span(),
-    );
-}
-
-#[instrument(skip(cancelation_token))]
-async fn listen(cancelation_token: &CancellationToken) {
-    loop {
-        if cancelation_token.is_cancelled() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_secs(2)).await;
-        info!("Loop")
-    }
+fn start_tracing() {
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                "csveer_server=debug,tower_http=debug,axum::rejection=trace".into()
+            }),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
 }
 
 async fn shutdown_signal(cancelation_token: CancellationToken) {

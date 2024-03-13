@@ -96,3 +96,29 @@ pub async fn insert_file_destination(
 
     Ok(created_file_destination)
 }
+
+pub async fn list_by_file_source_id(
+    file_source_id: &i32,
+    executor: &mut PgConnection,
+) -> anyhow::Result<Vec<FileDestination>> {
+    let file_destinations = sqlx::query_as!(
+        FileDestinationEntity,
+        r#"        
+            SELECT * FROM file_destination fd WHERE fd.file_source_id = $1
+        "#,
+        file_source_id.clone(),
+    )
+    .fetch_all(executor)
+    .await
+    .with_context(|| {
+        format!(
+            "Searching for file destinations for file source {}",
+            file_source_id
+        )
+    })?
+    .into_iter()
+    .map(|i| i.to_domain())
+    .collect();
+
+    Ok(file_destinations)
+}
