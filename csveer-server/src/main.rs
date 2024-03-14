@@ -47,6 +47,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         &tracker,
         cancellation_token.clone(),
         db_pool.clone(),
+        s3_client.clone(),
+        sqs_client.clone(),
     )
     .await;
 

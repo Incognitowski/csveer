@@ -72,18 +72,25 @@ pub async fn build_app(
         ))
 }
 
-#[instrument(skip(tracker, token, db_pool))]
+#[instrument(skip(tracker, token, db_pool, s3_client, sqs_client))]
 pub async fn start_file_ingestion_listener(
     tracker: &TaskTracker,
     token: CancellationToken,
     db_pool: Pool<Postgres>,
+    s3_client: S3Client,
+    sqs_client: SQSClient,
 ) {
-    let listener_span = info_span!("file-ingestion-listener");
+    let listener_span = info_span!(parent: None, "file-ingestion-listener");
     let _span_guard = listener_span.enter();
+    let app_state = AppState {
+        db_pool,
+        s3_client,
+        sqs_client,
+    };
     tracker.spawn(
         async move {
             tokio::select! {
-                res = app::file_ingestion_queue::listen_file_ingestion(&token, &db_pool) => {
+                res = app::file_ingestion_queue::listen_file_ingestion(&token, app_state) => {
                     match res {
                         Ok(_) => info!("File ingestion listener was shut down."),
                         Err(err) => error!("Listener execution failed. {:?}", err),
