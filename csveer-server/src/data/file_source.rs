@@ -64,9 +64,9 @@ pub struct FileSourceEntity {
     updated_at: Option<DateTime<Utc>>,
 }
 
-impl FileSourceEntity {
-    fn to_domain(self) -> FileSource {
-        FileSource {
+impl Into<FileSource> for FileSourceEntity {
+    fn into(self) -> FileSource {
+        return FileSource {
             id: self.id,
             context: self.context,
             identifier: self.identifier,
@@ -77,7 +77,7 @@ impl FileSourceEntity {
             hide_columns: self.hide_columns,
             created_at: self.created_at,
             updated_at: self.updated_at,
-        }
+        };
     }
 }
 
@@ -102,7 +102,7 @@ pub async fn insert_file_source(
     .fetch_one(executor)
     .await
     .context("Inserting file source into database")?
-    .to_domain();
+    .into();
 
     Ok(created_file_source)
 }
@@ -130,7 +130,7 @@ pub async fn find_by_context_and_identifier(
     })?;
 
     let file_source = match file_source_entity {
-        Some(entity) => Some(entity.to_domain()),
+        Some(entity) => Some(entity.into()),
         None => None,
     };
 

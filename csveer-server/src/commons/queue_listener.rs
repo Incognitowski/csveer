@@ -16,3 +16,35 @@ pub async fn poll_message(
 
     Ok(result)
 }
+
+pub async fn post_message(
+    client: &Client,
+    queue_url: &String,
+    message: String,
+) -> anyhow::Result<()> {
+    let _ = client
+        .send_message()
+        .queue_url(queue_url)
+        .message_body(message)
+        .send()
+        .await
+        .with_context(|| format!("Sending SQS message to queue {}", queue_url))?;
+
+    Ok(())
+}
+
+pub async fn ack_message(
+    client: &Client,
+    queue_url: &String,
+    message_receipt: &str,
+) -> anyhow::Result<()> {
+    let _ = client
+        .delete_message()
+        .queue_url(queue_url)
+        .receipt_handle(message_receipt)
+        .send()
+        .await
+        .with_context(|| format!("Acking SQS message of queue {}", queue_url))?;
+
+    Ok(())
+}

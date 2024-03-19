@@ -7,9 +7,10 @@ use tracing::{debug, error, info, info_span, instrument};
 use ulid::Ulid;
 
 use crate::{
-    commons::queue_listener::poll_message,
+    app::data_dispatch_queue::DataDispatchMessage,
+    commons::queue_listener::{ack_message, poll_message, post_message},
     config::{
-        listeners::FileIngestionListenerConfig,
+        listeners::{DataDispatchListenerConfig, FileIngestionListenerConfig},
         server::{AppError, AppState},
     },
     data::{file_destination, file_source},
@@ -21,6 +22,7 @@ pub async fn listen_file_ingestion(
 ) -> anyhow::Result<(), AppError> {
     let sqs_client = app_state.sqs_client;
     let file_ingestion_config = envy::from_env::<FileIngestionListenerConfig>()?;
+    let data_dispatch_config = envy::from_env::<DataDispatchListenerConfig>()?;
     let mut db_pool = app_state.db_pool;
     let listener_span = info_span!(parent: None, "file-ingestion-listener");
     let _guard = listener_span.enter();
@@ -39,9 +41,25 @@ pub async fn listen_file_ingestion(
             // SAFETY: We can unwrap here because we've
             // guaranteed there is a message with `if let`
             let message = messages.first().unwrap();
-            info!("About to process message: {}", message.body().unwrap());
-            process_message(&mut db_pool, &sqs_client, message).await?;
-            // TODO: Match on result to decide if will retry or discard message
+            let message_body = message.body().unwrap();
+            info!("About to process message: {}", message_body);
+            match process_message(&mut db_pool, &sqs_client, &data_dispatch_config, message).await {
+                Ok(_) => {
+                    ack_message(
+                        &sqs_client,
+                        &file_ingestion_config.queue_url,
+                        message.receipt_handle().unwrap(),
+                    )
+                    .await?;
+                    info!("Successfully processed message: {}", message_body);
+                }
+                Err(err) => {
+                    error!(
+                        "Failed to process message: {}. Error: {:?}",
+                        message_body, err,
+                    );
+                }
+            }
         }
         debug!("listener loop");
     }
@@ -52,6 +70,7 @@ pub async fn listen_file_ingestion(
 async fn process_message(
     db_pool: &mut Pool<Postgres>,
     sqs_client: &SQSClient,
+    data_dispatch_config: &DataDispatchListenerConfig,
     message: &Message,
 ) -> anyhow::Result<(), AppError> {
     let message_body = match message.body() {
@@ -68,7 +87,7 @@ async fn process_message(
             return Ok(());
         }
     };
-    process_s3_event(db_pool, sqs_client, s3_event).await?;
+    process_s3_event(db_pool, sqs_client, data_dispatch_config, s3_event).await?;
     Ok(())
 }
 
@@ -76,6 +95,7 @@ async fn process_message(
 async fn process_s3_event(
     db_pool: &mut Pool<Postgres>,
     sqs_client: &SQSClient,
+    data_dispatch_config: &DataDispatchListenerConfig,
     s3_event: S3Event,
 ) -> anyhow::Result<(), AppError> {
     for record in s3_event.records {
@@ -111,10 +131,32 @@ async fn process_s3_event(
             file_destination::list_by_file_source_id(&file_source.id, &mut *tx).await?;
 
         for destination in file_destinations {
+            let data_dispatch_message = DataDispatchMessage {
+                context: context.to_string(),
+                file_source_identifier: file_source.identifier.clone(),
+                file_destination_identifier: destination.identifier.clone(),
+                file_name: file_name.to_string(),
+            };
             info!(
-                "Sending message to data dispatch for file destination '{}'",
-                destination.identifier
+                "Sending message {:?} to data dispatch for file destination '{}'",
+                data_dispatch_message, destination.identifier
             );
+            match post_message(
+                sqs_client,
+                &data_dispatch_config.queue_url,
+                serde_json::to_string(&data_dispatch_message).unwrap(),
+            )
+            .await
+            {
+                Ok(_) => info!(
+                    "Successfully posted message {:?} to data dispatch for file destination '{}'",
+                    data_dispatch_message, destination.identifier
+                ),
+                Err(err) => error!(
+                    "Failed to post message {:?} to data dispatch for file destination '{}'. Error: {}",
+                    data_dispatch_message, destination.identifier, err.to_string()
+                ),
+            }
         }
 
         tx.commit().await?;

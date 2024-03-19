@@ -55,8 +55,8 @@ struct FileDestinationEntity {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-impl FileDestinationEntity {
-    fn to_domain(self) -> FileDestination {
+impl Into<FileDestination> for FileDestinationEntity {
+    fn into(self) -> FileDestination {
         return FileDestination {
             id: self.id,
             file_source_id: self.file_source_id,
@@ -92,7 +92,7 @@ pub async fn insert_file_destination(
     .fetch_one(executor)
     .await
     .context("Failed to insert file destination into database")?
-    .to_domain();
+    .into();
 
     Ok(created_file_destination)
 }
@@ -117,7 +117,7 @@ pub async fn list_by_file_source_id(
         )
     })?
     .into_iter()
-    .map(|i| i.to_domain())
+    .map(|i| i.into())
     .collect();
 
     Ok(file_destinations)
